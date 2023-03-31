@@ -30,9 +30,13 @@ class WordBank
 end
 
 class Word
-  def initialize(word_bank)
+  def initialize(word_bank, word=nil)
     @word_bank = word_bank
-    @selected_word = @word_bank.select_random_word
+    if word
+      @selected_word = word
+    else
+      @selected_word = @word_bank.select_random_word
+    end
     @displayed_word = "_" * @selected_word.length
   end
 
@@ -59,7 +63,7 @@ class Word
   def update_displayed_word(letter)
     found = false
     @selected_word.split("").each_with_index do |char, index|
-      if char == letter
+      if char == letter.downcase
         @displayed_word[index] = letter
         found = true
       end
@@ -69,13 +73,38 @@ class Word
 end
 
 class Game
-  def initialize(secret_word)
-    @secret_word = Word.new(secret_word)
+  def initialize(word_bank)
+    @word_bank = word_bank
+    @secret_word = Word.new(@word_bank)
     @display = Array.new(@secret_word.length, "_ ")
     @letters_guessed = []
     @hangman = Hangman.new
     @game_over = false
     @errors = 0
+  end
+
+  def menu
+    puts "
+    █░█ ▄▀█ █▄░█ █▀▀ █▀▄▀█ ▄▀█ █▄░█
+    █▀█ █▀█ █░▀█ █▄█ █░▀░█ █▀█ █░▀█"
+    puts "1. Start a new game"
+    puts "2. Load a saved game"
+    puts "3. Quit"
+    print "What would you like to do? "
+    
+    choice = gets.chomp.to_i
+    
+    case choice
+    when 1
+      start
+    when 2
+      load_game
+    when 3
+      exit
+    else
+      puts "Invalid choice, please try again."
+      menu
+    end
   end
 
   def start
@@ -101,15 +130,19 @@ class Game
 
   def get_user_input
     loop do
-      puts "Guess a letter:"
-      letter = gets.chomp.downcase
-      if letter.match?(/[a-z]/) && !@letters_guessed.include?(letter) && letter.length == 1
-        return letter
+      puts "Guess a letter, or enter 'save' to save the game:"
+      input = gets.chomp.downcase
+      if input == 'save'
+        save_game('saved_game.json')
+        puts "Game saved. Please enter another guess."
+      elsif input.match?(/[a-z]/) && !@letters_guessed.include?(input) && input.length == 1
+        return input
       else
         puts "Invalid input. Please guess a letter from A to Z that you have not already guessed."
       end
     end
   end
+  
 
   def update_game_state(letter)
     if @letters_guessed.include?(letter)
@@ -138,30 +171,38 @@ class Game
 
   def save_game(filename)
     game_state = {
+      word_bank: @word_bank,
       secret_word: @secret_word.to_s,
-      displayed_word: @secret_word.display_word,
+      display: @display,
       letters_guessed: @letters_guessed,
-      errors: @errors
-      # Add any other properties you want to save here
+      errors: @errors,
+      hangman: @hangman
     }
-    File.write(filename, game_state.to_json)
-    puts "Game saved to #{filename}."
+    File.open(filename, "w") do |file|
+      file.write(JSON.generate(game_state))
+    end
   end
 
-  def self.load_game(filename)
-    game_state = JSON.parse(File.read(filename))
-    secret_word = game_state['secret_word']
-    letters_guessed = game_state['letters_guessed']
-    errors = game_state['errors']
-    # Initialize a new game with the saved state
-    game = Game.new(secret_word)
-    game.instance_variable_set('@display', game_state['displayed_word'])
-    game.instance_variable_set('@letters_guessed', letters_guessed)
-    game.instance_variable_set('@errors', errors)
-    puts "Game loaded from #{filename}."
-    game
-  end
+  def load_game
+    saved_data = File.read('saved_game.json')
 
+    # Parse the JSON data and create new objects
+    saved_state = JSON.parse(saved_data)
+    secret_word = Word.new(@word_bank, saved_state["secret_word"])
+    game = Game.new(@word_bank)
+    @secret_word = game.instance_variable_set(:@secret_word, secret_word)
+    @display = game.instance_variable_set(:@display, saved_state["display"])
+    @letters_guessed = game.instance_variable_set(:@letters_guessed, saved_state["letters_guessed"])
+    @errors = game.instance_variable_set(:@errors, saved_state["errors"])
+    @secret_word
+    @display
+    @letters_guessed
+    @errors
+
+    # Start the loaded game
+    game.start
+  end
+  
 end
 
 class Hangman
@@ -244,7 +285,7 @@ end
 
 word_bank = WordBank.new(word_bank)
 game = Game.new(word_bank)
-game.start
+game.menu
 
 
 
